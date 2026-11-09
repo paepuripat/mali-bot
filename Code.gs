@@ -73,25 +73,46 @@ function readSheet(name) {
 }
 
 function buildPrompt(question) {
+  var personaData = readSheet('Persona');
   var faqData = readSheet('FAQ');
-  var faqText = '';
+  var menuData = readSheet('Menu');
   
-  for (var i = 0; i < faqData.length; i++) {
-    faqText += 'คำถาม: ' + faqData[i].topic + '\nคำตอบ: ' + faqData[i].answer + '\n---\n';
+  var personaText = '';
+  for (var i = 0; i < personaData.length; i++) {
+    personaText += '- ' + personaData[i].field + ': ' + personaData[i].value + '\n';
   }
   
-  var prompt = 'คุณคือผู้ช่วยตอบคำถามของร้านอาหาร ให้ตอบคำถามลูกค้าโดยใช้ข้อมูลจากรายการ FAQ ด้านล่างนี้เท่านั้น\n\n' +
-               '[รายการ FAQ ของร้าน]\n' + faqText + '\n' +
-               '[คำถามจากลูกค้า]\n' + question + '\n\n' +
-               'กติกาการตอบอย่างเคร่งครัด:\n' +
-               '1. ค้นหาคำถามลูกค้าใน FAQ หากมีคำตอบที่ตรงกันหรือใกล้เคียง ให้ตอบตามข้อมูลนั้น\n' +
-               '2. หากคำถามไม่อยู่ใน FAQ หรือไม่สามารถตอบได้จากข้อมูลที่มี ให้ตอบคำว่า "ขออภัยค่ะ ขณะนี้ยังไม่มีข้อมูลเรื่องนี้ค่ะ" เท่านั้น ห้ามเดาหรือคิดคำตอบขึ้นมาเองเด็ดขาด';
+  var faqText = '';
+  for (var j = 0; j < faqData.length; j++) {
+    faqText += 'หัวข้อ: ' + faqData[j].topic + ' | คำตอบ: ' + faqData[j].answer + '\n';
+  }
+  
+  var menuText = '';
+  for (var k = 0; k < menuData.length; k++) {
+    menuText += 'เมนู: ' + menuData[k].name + ' | ราคา: ' + menuData[k].price + ' | ความเผ็ด: ' + menuData[k].spice + ' | สารก่อภูมิแพ้/ส่วนผสมที่ควรระวัง: ' + menuData[k].allergens + '\n';
+  }
+  
+  var prompt = 'คุณคือบอทผู้ช่วยของร้านอาหาร กรุณาตอบคำถามลูกค้าโดยใช้ข้อมูลและกติกาด้านล่างนี้อย่างเคร่งครัด:\n\n' +
+               '[ข้อมูลบุคลิกและข้อมูลร้าน (Persona)]\n' + personaText + '\n' +
+               '[ข้อมูลคำถามที่พบบ่อย (FAQ)]\n' + faqText + '\n' +
+               '[ข้อมูลเมนูอาหาร (Menu)]\n' + menuText + '\n' +
+               '[กติกาของบอทที่ต้องทำตามทุกข้อ]\n' +
+               '1. พูดตาม Persona: ใช้ชื่อที่บอทเรียกตัวเอง คำลงท้าย สไตล์การพูด และอีโมจิตามที่กำหนดไว้ใน Persona\n' +
+               '2. ตอบจากข้อมูลใน Sheet เท่านั้น ห้ามแต่งราคา โปรโมชัน หรือเวลาเปิด-ปิด ขึ้นมาเองเด็ดขาด\n' +
+               '3. ถ้าไม่มีข้อมูลใน Sheet ให้ใช้ข้อความตอนไม่รู้คำตอบจาก Persona\n' +
+               '4. ห้ามยืนยันการจองโต๊ะเองเด็ดขาด ให้แจ้งลูกค้าติดต่อร้านตามช่องทางติดต่อใน Persona\n' +
+               '5. หากถามเรื่องแพ้อาหาร: ให้บอกส่วนผสมที่ควรระวังตามข้อมูลใน Menu และแนะนำให้แจ้งทางร้านโดยตรง ห้ามรับประกันว่าปลอดภัย 100%\n' +
+               '6. หากลูกค้าไม่พอใจหรือร้องเรียน: ให้กล่าวขอโทษอย่างสุภาพ แล้วส่งต่อให้พนักงานคนจริงพร้อมแจ้งช่องทางติดต่อจาก Persona\n' +
+               '7. หากถามเรื่องที่อยู่ในรายการห้ามคุย (ตามที่ระบุใน Persona): ให้ปฏิเสธอย่างสุภาพ\n' +
+               '8. ตอบสั้นกระชับ ไม่เกิน 3 ประโยค และห้ามใช้ bullet list (รายการจุดหรือขีด) ในคำตอบเด็ดขาด\n\n' +
+               '[คำถามจากลูกค้า]\n' + question;
   return prompt;
 }
 
 function callAI(prompt) {
   var apiKey = PropertiesService.getScriptProperties().getProperty('AI_API_KEY');
-  var url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent';
+  var primaryModel = 'gemini-3.1-flash-lite';
+  var fallbackModel = 'gemini-3.5-flash';
   
   var payload = {
     contents: [{
@@ -111,27 +132,47 @@ function callAI(prompt) {
     muteHttpExceptions: true
   };
   
+  var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + primaryModel + ':generateContent';
   var response = UrlFetchApp.fetch(url, options);
   var responseCode = response.getResponseCode();
-  var responseText = response.getContentText();
   
+  if (responseCode === 503 || responseCode === 429) {
+    Logger.log('Primary model returned ' + responseCode + '. Retrying with fallback model: ' + fallbackModel);
+    var fallbackUrl = 'https://generativelanguage.googleapis.com/v1beta/models/' + fallbackModel + ':generateContent';
+    response = UrlFetchApp.fetch(fallbackUrl, options);
+    responseCode = response.getResponseCode();
+  }
+  
+  var responseText = response.getContentText();
   if (responseCode !== 200) {
     throw new Error('Gemini API Error (Status ' + responseCode + '): ' + responseText);
   }
   
   var json = JSON.parse(responseText);
-  if (json.candidates && json.candidates[0] && json.candidates[0].content && json.candidates[0].content.parts[0]) {
-    return json.candidates[0].content.parts[0].text.trim();
+  if (json.candidates && json.candidates[0] && json.candidates[0].content && json.candidates[0].content.parts) {
+    var parts = json.candidates[0].content.parts;
+    var fullText = '';
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i].text) {
+        fullText += parts[i].text;
+      }
+    }
+    return fullText.trim();
   } else {
     throw new Error('Unexpected Gemini API response structure: ' + responseText);
   }
 }
 
 function testBot() {
-  var testQuestions = ['ร้านเปิดกี่โมงคะ', 'มีโปรอะไรไหม'];
+  var testQuestions = [
+    'ข้าวผัดกุ้งราคาเท่าไหร่',
+    'แพ้กุ้ง กินต้มยำได้ไหม',
+    'จองโต๊ะ 4 คน พรุ่งนี้ทุ่มนึงได้ไหม',
+    'อาหารวันนี้เค็มมาก ไม่ประทับใจเลย'
+  ];
   for (var i = 0; i < testQuestions.length; i++) {
     var q = testQuestions[i];
     var ans = answer(q);
-    Logger.log('คำถาม: ' + q + ' -> คำตอบที่ได้: ' + ans);
+    Logger.log('คำถาม: ' + q + ' -> คำตอบ: ' + ans);
   }
 }
