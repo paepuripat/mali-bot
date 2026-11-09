@@ -1,3 +1,10 @@
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('บอท')
+    .addItem('รันชุดทดสอบ', 'runTests')
+    .addToUi();
+}
+
 function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
@@ -174,5 +181,32 @@ function testBot() {
     var q = testQuestions[i];
     var ans = answer(q);
     Logger.log('คำถาม: ' + q + ' -> คำตอบ: ' + ans);
+  }
+}
+
+function runTests() {
+  var sheet = SpreadsheetApp.getActive().getSheetByName('Test');
+  if (!sheet) return;
+  
+  var values = sheet.getDataRange().getValues();
+  if (values.length <= 1) return;
+  
+  var headers = values[0];
+  var questionIdx = headers.indexOf('question');
+  var botAnswerIdx = headers.indexOf('bot_answer');
+  
+  if (questionIdx === -1 || botAnswerIdx === -1) return;
+  
+  for (var r = 1; r < values.length; r++) {
+    var question = values[r][questionIdx];
+    if (!question) continue;
+    
+    var reply = answer(String(question));
+    sheet.getRange(r + 1, botAnswerIdx + 1).setValue(reply);
+    SpreadsheetApp.flush();
+    
+    if (r < values.length - 1) {
+      Utilities.sleep(5000);
+    }
   }
 }
